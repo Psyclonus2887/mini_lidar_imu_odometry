@@ -1,3 +1,9 @@
+/**
+  *mini_LIO.cpp
+  *brief:to merge several frames of point cloud
+  *author:Yang Chenglin
+  *date:2021
+  **/
 #include "ros/ros.h"
 #include <iostream>
 #include <fstream>
@@ -13,11 +19,14 @@
 #include <Eigen/Eigen>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/Imu.h>
+//#include "cyber_msgs/VehicleSpeedFeedback.h" //注意这个还没有添加
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include "std_msgs/String.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
 #include <pcl/kdtree/kdtree_flann.h>
-
+#include <pcl/common/transforms.h>
 
 using POINT = pcl::PointXYZ;
 using CLOUD = pcl::PointCloud<POINT>;
@@ -42,10 +51,10 @@ struct IMUData
 class frame //将点云和其相对上一帧的位姿存储在一个类内
 {
 public:
-    frame():cloud_ptr_(new CLOUD)
+    frame():cloud_ptr_(new CLOUD())
     {}
-    ~frame();
-private:
+    //~frame();
+
     double t;
     Eigen::Matrix4d state;
     CLOUD_PTR cloud_ptr_;
@@ -57,10 +66,12 @@ public:
     mini_LIO(ros::NodeHandle &nh);
     ~mini_LIO();
 
-    int frame_num_ = 10; //执行多帧融合的帧数, default=10
+    int frame_num_ = 5; //执行多帧融合的帧数, default=10
 
 private:
     bool have_init_delta_ = false; //判断是否有初始化Δ
+
+    CLOUD_PTR final_cloud_; //用于发布融合后的最终点云
 
     double cali_x_;
     double cali_y_;
@@ -71,17 +82,23 @@ private:
 
     DELTA cur_delta_;
 
+    double cur_vel_ = 0; //假设车辆速度方向与IMU的x轴方向相同
+
     std::deque<frame> frames_;
 
     ros::Publisher pub_merged_pointcloud_;
 
     ros::Subscriber sub_imu_;
     ros::Subscriber sub_pl2_;
+    ros::Subscriber sub_vel_;
 
     void imu_callback(const sensor_msgs::ImuConstPtr &input);
     void pl2_callback(const sensor_msgs::PointCloud2ConstPtr &input);
+    //void vel_callback(const cyber_msgs::VehicleSpeedFeedbackConstPtr &vel_in);
+    void vel_callback_2(const geometry_msgs::TwistWithCovarianceStampedConstPtr &vel_in);
 
     Eigen::Quaterniond expmap(const Eigen::Vector3d &w);
-    void integrate(const IMUData &data, const Eigen::Vector3d &bg, const Eigen::Vector3d &ba);
+    Eigen::Matrix4d inv_homo(Eigen::Matrix4d &in);
+    void integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, const Eigen::Vector3d &ba);
     void merge(); //将当前类内全部的点云根据相对位姿进行融合叠加,最终结果是基于最后一帧坐标系的
 };
