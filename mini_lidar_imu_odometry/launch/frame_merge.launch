@@ -1,5 +1,7 @@
 <launch>
-    <node pkg="mini_lidar_imu_odometry" type="mini_lidar_imu_odometry" name="mini_lidar_imu_odometry" output="screen">
-      <param name="localization_debug" type="bool" value = "true"/>
+    <node pkg="mini_lidar_imu_odometry" type="mini_lidar_imu_odometry_node" name="mini_lidar_imu_odometry_node" output="screen">
+      <param name="leafsize_" type="double" value = "0.7"/>
+      <param name="frame_num_" type="int" value = "5"/>
+      <param name="interval_" type="int" value = "5"/>
     </node>
 </launch>

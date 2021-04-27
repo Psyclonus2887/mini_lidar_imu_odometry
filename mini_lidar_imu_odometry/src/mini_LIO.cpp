@@ -17,9 +17,14 @@ void DELTA::Reset()
 
 mini_LIO::mini_LIO(ros::NodeHandle &nh)
 {
+    frame_count_ = 0;
     bg_.setZero();
     ba_ << -0.05, -0.15, 0; //默认bias
     std::cout<<"bias is "<<bg_<<" "<<ba_<<std::endl;
+
+    nh.param<float>("leafsize_", leafsize_, 0.3);
+    nh.param<int>("frame_num_", frame_num_, 4);
+    nh.param<int>("interval_", interval_, 0);
 
     sub_imu_ = nh.subscribe("/Inertial/imu/data", 1000, &mini_LIO::imu_callback, this);
     sub_pl2_ = nh.subscribe("/driver/pandar/point_cloud", 1000, &mini_LIO::pl2_callback, this);
@@ -64,13 +69,21 @@ void mini_LIO::imu_callback(const sensor_msgs::ImuConstPtr &input)
 
 void mini_LIO::pl2_callback(const sensor_msgs::PointCloud2ConstPtr &input)
 {
+    if((frame_count_ != 0) && (frame_count_ != (interval_+1)))
+        return;
+
+    if(frame_count_ == (interval_+1))
+    {
+        frame_count_ = 0;
+    }
+    
     frame new_frame;
     static CLOUD_PTR temp_cloud(new CLOUD()); 
     static CLOUD cur_cloud;
     pcl::fromROSMsg(*input, *temp_cloud);
 
     sor_.setInputCloud(temp_cloud);
-    sor_.setLeafSize(0.01f, 0.01f, 0.01f);
+    sor_.setLeafSize(leafsize_, leafsize_, leafsize_);
     sor_.filter(cur_cloud);
 
     new_frame.t = cur_delta_.t;
@@ -98,6 +111,8 @@ void mini_LIO::pl2_callback(const sensor_msgs::PointCloud2ConstPtr &input)
     pcl::toROSMsg(*final_cloud_, pl2_msg);
     pl2_msg.header.frame_id = "mini_LIO";
     pub_merged_pointcloud_.publish(pl2_msg);
+
+    frame_count_++;
 }
 
 /*
@@ -144,7 +159,7 @@ void mini_LIO::integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, cons
     w.head(2) << 0,0;
     a.tail(1) << 0;
 
-    a(2) = -a(2);
+    a(2) = -a(2); //因为IMU系是左手系
 
     std::cout<<"Angular vel and Linear acc are "<<w<<" "<<a<<std::endl;
 
@@ -154,21 +169,6 @@ void mini_LIO::integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, cons
     cur_delta_.p = cur_delta_.p + dt * cur_delta_.v + 0.5 * dt * dt * (cur_delta_.q * a); //计算当前在帧起始坐标系下的
     cur_delta_.v = cur_delta_.v + dt * (cur_delta_.q * a); //计算当前在帧起始坐标系下的速度投影
     cur_delta_.q = (cur_delta_.q * expmap(w * dt)).normalized(); //计算旋转矩阵
-}
-
-void mini_LIO::pltransform(CLOUD cloud_in, CLOUD cloud_out, Eigen::Matrix4d homo_mat)
-{
-    for (int nIndex = 0; nIndex < cloud_in.points.size(); nIndex++)
-    {
-        Eigen::Vector4d cur_point;
-        cur_point << cloud_in.points[nIndex].x, cloud_in.points[nIndex].y, cloud_in.points[nIndex].z, 1;
-        cur_point = homo_mat*cur_point;
-        POINT pcl_point;
-        pcl_point.x = cur_point(0);
-        pcl_point.y = cur_point(1);
-        pcl_point.z = cur_point(2);
-        cloud_out.push_back(pcl_point);
-    }
 }
 
 void mini_LIO::merge()

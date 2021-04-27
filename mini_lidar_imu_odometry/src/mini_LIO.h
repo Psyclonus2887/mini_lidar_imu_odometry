@@ -68,12 +68,15 @@ public:
     mini_LIO(ros::NodeHandle &nh);
     ~mini_LIO();
 
-    int frame_num_ = 5; //执行多帧融合的帧数, default=10
+    int frame_num_; //执行多帧融合的帧数, default=4
+    int interval_; //融合的两帧之间相差多少帧，default=0
+    int frame_count_; //计算当前的帧数是否达到interval_所规定的限制
 
 private:
     bool have_init_delta_ = false; //判断是否有初始化Δ
 
     pcl::VoxelGrid<POINT> sor_; //用于点云降采样
+    float leafsize_; //体素网格降采样叶子大小
 
     CLOUD_PTR final_cloud_; //用于发布融合后的最终点云
 
@@ -100,6 +103,5 @@ private:
     Eigen::Quaterniond expmap(const Eigen::Vector3d &w);
     Eigen::Matrix4d inv_homo(Eigen::Matrix4d &in);
     void integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, const Eigen::Vector3d &ba);
-    void pltransform(CLOUD cloud_in, CLOUD cloud_out, Eigen::Matrix4d homo_mat);
     void merge(); //将当前类内全部的点云根据相对位姿进行融合叠加,最终结果是基于最后一帧坐标系的
 };
