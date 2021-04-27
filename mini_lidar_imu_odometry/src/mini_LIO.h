@@ -25,8 +25,10 @@
 #include "std_msgs/String.h"
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/common/transforms.h>
+#include <pcl/filters/voxel_grid.h>
 
 using POINT = pcl::PointXYZ;
 using CLOUD = pcl::PointCloud<POINT>;
@@ -71,11 +73,9 @@ public:
 private:
     bool have_init_delta_ = false; //判断是否有初始化Δ
 
-    CLOUD_PTR final_cloud_; //用于发布融合后的最终点云
+    pcl::VoxelGrid<POINT> sor_; //用于点云降采样
 
-    double cali_x_;
-    double cali_y_;
-    double cali_z_; //激光雷达与IMU之间的标定关系
+    CLOUD_PTR final_cloud_; //用于发布融合后的最终点云
 
     Eigen::Vector3d bg_; //角速度bias
     Eigen::Vector3d ba_; //加速度bias
@@ -100,5 +100,6 @@ private:
     Eigen::Quaterniond expmap(const Eigen::Vector3d &w);
     Eigen::Matrix4d inv_homo(Eigen::Matrix4d &in);
     void integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, const Eigen::Vector3d &ba);
+    void pltransform(CLOUD cloud_in, CLOUD cloud_out, Eigen::Matrix4d homo_mat);
     void merge(); //将当前类内全部的点云根据相对位姿进行融合叠加,最终结果是基于最后一帧坐标系的
 };

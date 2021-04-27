@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="mini_lidar_imu_odometry" type="mini_lidar_imu_odometry" name="mini_lidar_imu_odometry" output="screen">
+      <param name="localization_debug" type="bool" value = "true"/>
+    </node>
+</launch>

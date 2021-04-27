@@ -21,10 +21,6 @@ mini_LIO::mini_LIO(ros::NodeHandle &nh)
     ba_ << -0.05, -0.15, 0; //默认bias
     std::cout<<"bias is "<<bg_<<" "<<ba_<<std::endl;
 
-    nh.param<double>("cali_x_", cali_x_, 0.0);
-    nh.param<double>("cali_y_", cali_y_, 0.0);
-    nh.param<double>("cali_z_", cali_z_, 0.0);
-
     sub_imu_ = nh.subscribe("/Inertial/imu/data", 1000, &mini_LIO::imu_callback, this);
     sub_pl2_ = nh.subscribe("/driver/pandar/point_cloud", 1000, &mini_LIO::pl2_callback, this);
     //sub_vel_ = nh.subscribe("/e100/speed_feedback", 1000, &mini_LIO::vel_callback, this);
@@ -69,8 +65,13 @@ void mini_LIO::imu_callback(const sensor_msgs::ImuConstPtr &input)
 void mini_LIO::pl2_callback(const sensor_msgs::PointCloud2ConstPtr &input)
 {
     frame new_frame;
+    static CLOUD_PTR temp_cloud(new CLOUD()); 
     static CLOUD cur_cloud;
-    pcl::fromROSMsg(*input, cur_cloud);
+    pcl::fromROSMsg(*input, *temp_cloud);
+
+    sor_.setInputCloud(temp_cloud);
+    sor_.setLeafSize(0.01f, 0.01f, 0.01f);
+    sor_.filter(cur_cloud);
 
     new_frame.t = cur_delta_.t;
     //new_frame.cloud_ptr_ = cur_cloud.makeShared();
@@ -83,7 +84,7 @@ void mini_LIO::pl2_callback(const sensor_msgs::PointCloud2ConstPtr &input)
     cur_delta_.Reset();
     have_init_delta_ = false;
 
-    if(frames_.size() == frame_num_)
+    if(frames_.size() == (frame_num_+1))
         frames_.pop_front();        
 
     for (auto i = frames_.begin(); i < frames_.end(); i++)
@@ -155,16 +156,31 @@ void mini_LIO::integrate_2d(const IMUData &data, const Eigen::Vector3d &bg, cons
     cur_delta_.q = (cur_delta_.q * expmap(w * dt)).normalized(); //计算旋转矩阵
 }
 
+void mini_LIO::pltransform(CLOUD cloud_in, CLOUD cloud_out, Eigen::Matrix4d homo_mat)
+{
+    for (int nIndex = 0; nIndex < cloud_in.points.size(); nIndex++)
+    {
+        Eigen::Vector4d cur_point;
+        cur_point << cloud_in.points[nIndex].x, cloud_in.points[nIndex].y, cloud_in.points[nIndex].z, 1;
+        cur_point = homo_mat*cur_point;
+        POINT pcl_point;
+        pcl_point.x = cur_point(0);
+        pcl_point.y = cur_point(1);
+        pcl_point.z = cur_point(2);
+        cloud_out.push_back(pcl_point);
+    }
+}
+
 void mini_LIO::merge()
 {
     //CLOUD temp_cloud;
     CLOUD temp_final_cloud;
     
-    for(auto i = frames_.begin(); i < frames_.end(); i++)
+    for(auto i = frames_.begin(); i < (frames_.end()-1); i++)
     {
         CLOUD temp_cloud;
         Eigen::Matrix4d inv;
-        inv = inv_homo((*i).state);
+        inv = inv_homo((*(i+1)).state);
 
         //对应pandar雷达的安装方式，坐标系要作出调整
         double x_fix = inv(1,3);
@@ -174,9 +190,11 @@ void mini_LIO::merge()
 
         std::cout<<"TF Matrix is: "<<inv<<std::endl;
         pcl::transformPointCloud(*((*i).cloud_ptr_), temp_cloud, inv);
+        //pltransform(*((*i).cloud_ptr_), temp_cloud, inv);
         //temp_cloud = *((*i).cloud_ptr_);
         temp_final_cloud += temp_cloud;
     }
 
     final_cloud_.reset(new CLOUD(temp_final_cloud));
+    std::cout<<"PL size: "<<final_cloud_->points.size()<<std::endl;
 }
