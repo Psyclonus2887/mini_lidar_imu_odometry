@@ -91,9 +91,13 @@ private:
     Eigen::Vector3d bg_; //角速度bias
     Eigen::Vector3d ba_; //加速度bias
 
+    Eigen::Vector3d last_w; //上一时刻的角速度，用于提升积分精度
+
     DELTA cur_delta_;
 
     Eigen::Quaterniond q_all; //此四元数用来积分记录相对于开始时刻的全局姿态，即一直进行积分计算
+
+    Eigen::Quaterniond q_last; //此四元数用来记录
 
     double cur_vel_ = 0; //假设反馈的车辆速度方向与IMU的x轴方向相同
 
